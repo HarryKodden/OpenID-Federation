@@ -9,8 +9,9 @@ services:
       POSTGRES_USER: ${DATASOURCE_USER}
       POSTGRES_PASSWORD: ${DATASOURCE_PASSWORD}
       POSTGRES_DB: ${DATASOURCE_DB}
-    ports:
-      - "5432:5432"
+      ROOT_IDENTIFIER: ${ROOT_IDENTIFIER}
+#   ports:
+#     - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -26,7 +27,7 @@ services:
       interval: 3s
       timeout: 5s
       retries: 20
-
+    
   local-kms-db:
     image: postgres:latest
     container_name: openid-federation-local-kms-datastore
@@ -37,8 +38,8 @@ services:
       POSTGRES_USER: ${LOCAL_KMS_DATASOURCE_USER}
       POSTGRES_PASSWORD: ${LOCAL_KMS_DATASOURCE_PASSWORD}
       POSTGRES_DB: ${LOCAL_KMS_DATASOURCE_DB}
-    ports:
-      - "5433:5432"
+#   ports:
+#     - "5433:5432"
     volumes:
       - local_kms_data:/var/lib/postgresql/data
     networks:
@@ -64,8 +65,8 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-    ports:
-      - "8080:8080"
+#   ports:
+#     - "8080:8080"
     environment:
       DATASOURCE_URL: ${DATASOURCE_URL}
       DATASOURCE_USER: ${DATASOURCE_USER}
@@ -97,6 +98,17 @@ services:
       /bin/sh -c "java -jar /app/federation-server.jar"
     networks:
       - openid_network
+      - external
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.findy-server.rule=Host(`openid-federation-demo.${DOMAIN}`)"
+      - "traefik.http.routers.findy-server.priority=1"
+      - "traefik.http.routers.findy-server.tls=true"
+      - "traefik.http.routers.findy-server.tls.certresolver=le"
+      - "traefik.http.routers.findy-server.entrypoints=https"
+      - "traefik.http.routers.findy-server.service=findy-server"
+      - "traefik.http.services.findy-server.loadbalancer.server.port=8080"
+
   admin-server:
     image: sphereon/openid-federation-admin-server:latest
     build:
@@ -110,8 +122,8 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-    ports:
-      - "8081:8080"
+#   ports:
+#     - "8081:8080"
     environment:
       DATASOURCE_URL: ${DATASOURCE_URL}
       DATASOURCE_USER: ${DATASOURCE_USER}
@@ -133,6 +145,7 @@ services:
         condition: service_healthy
     networks:
       - openid_network
+      - external
     logging:
       driver: "json-file"
       options:
@@ -143,6 +156,16 @@ services:
     user: root
     entrypoint: >
       /bin/sh -c "java -jar /app/admin-server.jar"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sp-admin.rule=Host(`findy-admin.${DOMAIN}`)"
+      - "traefik.http.routers.sp-admin.priority=1"
+      - "traefik.http.routers.sp-admin.tls=true"
+      - "traefik.http.routers.sp-admin.tls.certresolver=le"
+      - "traefik.http.routers.sp-admin.entrypoints=https"
+      - "traefik.http.routers.sp-admin.service=sp-admin"
+      - "traefik.http.services.sp-admin.loadbalancer.server.port=8080"
+
   keycloak:
     image: keycloak/keycloak:26.0
     user: keycloak
@@ -159,15 +182,22 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-    ports:
-      - "8082:8080"
+#   ports:
+#     - "8082:8080"
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
       - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      - KC_PROXY=edge
+      - KC_PROXY_HEADERS=xforwarded
+      - KC_HOSTNAME=findy-keycloak.${DOMAIN}
       - KC_HEALTH_ENABLED=true
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - PROXY_ADDRESS_FORWARDING=true
       - JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+UseG1GC
     volumes:
-      - ./.docker/keycloak:/opt/keycloak/data/import/
+#     - ./.docker/keycloak:/opt/keycloak/data/import/
+      - ./config/keycloak:/opt/keycloak/data/import/
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -176,16 +206,28 @@ services:
         max-file: "3"
     networks:
       - openid_network
+      - external
     healthcheck:
       test: [ "CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost:9000\r\nConnection: close\r\n\r\n' >&3;cat <&3 | grep -q '\"status\": \"UP\"' && exit 0 || exit 1" ]
       interval: 3s
       timeout: 10s
       retries: 10
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.findy-keycloak.rule=Host(`findy-keycloak.${DOMAIN}`)"
+      - "traefik.http.routers.findy-keycloak.priority=1"
+      - "traefik.http.routers.findy-keycloak.tls=true"
+      - "traefik.http.routers.findy-keycloak.tls.certresolver=le"
+      - "traefik.http.routers.findy-keycloak.entrypoints=https"
+      - "traefik.http.routers.findy-keycloak.service=findy-keycloak"
+      - "traefik.http.services.findy-keycloak.loadbalancer.server.port=8080"
 
 networks:
   openid_network:
     driver: bridge
+  external:
+    external: true
 
 volumes:
   postgres_data:

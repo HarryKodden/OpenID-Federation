@@ -1,3 +1,5 @@
+.env
+notebook/.env
 *.iml
 .kotlin
 .gradle
