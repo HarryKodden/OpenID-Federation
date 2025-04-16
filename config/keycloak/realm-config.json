@@ -6,7 +6,7 @@
   "sslRequired": "external",
   "accessTokenLifespan": 360000,
   "attributes": {
-    "frontendUrl": "https://findy-keycloak.pilot1.sram.surf.nl"
+    "frontendUrl": "https://openid-federation-server-keycloak.pilot1.sram.surf.nl"
   },
   "users": [
     {
@@ -48,7 +48,7 @@
       "publicClient": false,
       "protocol": "openid-connect",
       "redirectUris": [
-        "https://findy-admin.pilot1.sram.surf.nl/callback"
+        "https://openid-federation-server-keycloak.pilot1.sram.surf.nl/callback"
       ],
       "webOrigins": [
         "*"

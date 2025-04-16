@@ -2,16 +2,12 @@ services:
   db:
     image: postgres:latest
     container_name: openid-federation-datastore
-    user: postgres
     security_opt:
       - no-new-privileges:true
     environment:
       POSTGRES_USER: ${DATASOURCE_USER}
       POSTGRES_PASSWORD: ${DATASOURCE_PASSWORD}
       POSTGRES_DB: ${DATASOURCE_DB}
-      ROOT_IDENTIFIER: ${ROOT_IDENTIFIER}
-#   ports:
-#     - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -27,63 +23,32 @@ services:
       interval: 3s
       timeout: 5s
       retries: 20
-    
-  local-kms-db:
-    image: postgres:latest
-    container_name: openid-federation-local-kms-datastore
-    user: postgres
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      POSTGRES_USER: ${LOCAL_KMS_DATASOURCE_USER}
-      POSTGRES_PASSWORD: ${LOCAL_KMS_DATASOURCE_PASSWORD}
-      POSTGRES_DB: ${LOCAL_KMS_DATASOURCE_DB}
-#   ports:
-#     - "5433:5432"
-    volumes:
-      - local_kms_data:/var/lib/postgresql/data
-    networks:
-      - openid_network
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -d ${LOCAL_KMS_DATASOURCE_DB} -U ${LOCAL_KMS_DATASOURCE_USER}" ]
-      interval: 3s
-      timeout: 5s
-      retries: 20
-  federation-server:
+
+  openid-federation-server:
     image: sphereon/openid-federation-server:latest
     build:
       context: .
-      dockerfile: ./.docker/federation-server/Dockerfile
+      dockerfile: ./.docker/openid-federation-server/Dockerfile
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 1G
+          cpus: '1.5'
+          memory: 1536M
         reservations:
           cpus: '0.5'
-          memory: 512M
-#   ports:
-#     - "8080:8080"
+          memory: 768M
     environment:
-      DATASOURCE_URL: ${DATASOURCE_URL}
+      DATASOURCE_URL: jdbc:postgresql://db:5432/${DATASOURCE_DB}
       DATASOURCE_USER: ${DATASOURCE_USER}
-      DATASOURCE_PASSWORD: ${DATASOURCE_PASSWORD}
+      DATASOURCE_PASSWORD: ${DATASOURCE_PASSWORD} 
       APP_KEY: ${APP_KEY}
       KMS_PROVIDER: ${KMS_PROVIDER}
-      LOCAL_KMS_DATASOURCE_URL: ${LOCAL_KMS_DATASOURCE_URL}
-      LOCAL_KMS_DATASOURCE_USER: ${LOCAL_KMS_DATASOURCE_USER}
-      LOCAL_KMS_DATASOURCE_PASSWORD: ${LOCAL_KMS_DATASOURCE_PASSWORD}
-      LOCAL_KMS_DATASOURCE_DB: ${LOCAL_KMS_DATASOURCE_DB}
-      ROOT_IDENTIFIER: ${ROOT_IDENTIFIER}
+      ROOT_IDENTIFIER: https://openid-federation-server.${DOMAIN}
       DEV_MODE: ${DEV_MODE}
       LOGGER_SEVERITY: ${LOGGER_SEVERITY}
+      LOGGER_OUTPUT: ${LOGGER_OUTPUT}
     depends_on:
       db:
-        condition: service_healthy
-      local-kms-db:
         condition: service_healthy
     restart: unless-stopped
     logging:
@@ -92,56 +57,46 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - ./logs/federation-server:/tmp/logs
-    user: root
-    entrypoint: >
-      /bin/sh -c "java -jar /app/federation-server.jar"
+      - logs-openid-federation-server:/tmp/logs
     networks:
       - openid_network
       - external
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.findy-server.rule=Host(`openid-federation-demo.${DOMAIN}`)"
-      - "traefik.http.routers.findy-server.priority=1"
-      - "traefik.http.routers.findy-server.tls=true"
-      - "traefik.http.routers.findy-server.tls.certresolver=le"
-      - "traefik.http.routers.findy-server.entrypoints=https"
-      - "traefik.http.routers.findy-server.service=findy-server"
-      - "traefik.http.services.findy-server.loadbalancer.server.port=8080"
+      - "traefik.http.routers.openid-federation-server-keycloakserver.rule=Host(`openid-federation-server.${DOMAIN}`)"
+      - "traefik.http.routers.openid-federation-server-keycloakserver.priority=1"
+      - "traefik.http.routers.openid-federation-server-keycloakserver.tls=true"
+      - "traefik.http.routers.openid-federation-server-keycloakserver.tls.certresolver=le"
+      - "traefik.http.routers.openid-federation-server-keycloakserver.entrypoints=https"
+      - "traefik.http.routers.openid-federation-server-keycloakserver.service=openid-federation-server-keycloakserver"
+      - "traefik.http.services.openid-federation-server-keycloakserver.loadbalancer.server.port=8080"
 
-  admin-server:
+  openid-federation-admin-server:
     image: sphereon/openid-federation-admin-server:latest
     build:
       context: .
-      dockerfile: ./.docker/admin-server/Dockerfile
+      dockerfile: ./.docker/openid-federation-admin-server/Dockerfile
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 1G
+          cpus: '1.5'
+          memory: 1536M
         reservations:
           cpus: '0.5'
-          memory: 512M
-#   ports:
-#     - "8081:8080"
+          memory: 768M
     environment:
-      DATASOURCE_URL: ${DATASOURCE_URL}
+      DATASOURCE_URL: jdbc:postgresql://db:5432/${DATASOURCE_DB}
       DATASOURCE_USER: ${DATASOURCE_USER}
-      DATASOURCE_PASSWORD: ${DATASOURCE_PASSWORD}
+      DATASOURCE_PASSWORD: ${DATASOURCE_PASSWORD} 
       APP_KEY: ${APP_KEY}
       KMS_PROVIDER: ${KMS_PROVIDER}
-      LOCAL_KMS_DATASOURCE_URL: ${LOCAL_KMS_DATASOURCE_URL}
-      LOCAL_KMS_DATASOURCE_USER: ${LOCAL_KMS_DATASOURCE_USER}
-      LOCAL_KMS_DATASOURCE_PASSWORD: ${LOCAL_KMS_DATASOURCE_PASSWORD}
-      LOCAL_KMS_DATASOURCE_DB: ${LOCAL_KMS_DATASOURCE_DB}
-      ROOT_IDENTIFIER: ${ROOT_IDENTIFIER}
-      OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI: ${OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI}
+      ROOT_IDENTIFIER: https://openid-federation-server.${DOMAIN}
       DEV_MODE: ${DEV_MODE}
       LOGGER_SEVERITY: ${LOGGER_SEVERITY}
+      LOGGER_OUTPUT: ${LOGGER_OUTPUT}
+      OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI: https://openid-federation-server-keycloak.${DOMAIN}/realms/openid-federation
     depends_on:
       db:
-        condition: service_healthy
-      local-kms-db:
         condition: service_healthy
     networks:
       - openid_network
@@ -151,14 +106,9 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    volumes:
-      - ./logs/admin-server:/tmp/logs
-    user: root
-    entrypoint: >
-      /bin/sh -c "java -jar /app/admin-server.jar"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.sp-admin.rule=Host(`findy-admin.${DOMAIN}`)"
+      - "traefik.http.routers.sp-admin.rule=Host(`openid-federation-admin-server.${DOMAIN}`)"
       - "traefik.http.routers.sp-admin.priority=1"
       - "traefik.http.routers.sp-admin.tls=true"
       - "traefik.http.routers.sp-admin.tls.certresolver=le"
@@ -177,26 +127,23 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 1G
+          cpus: '1.5'
+          memory: 1536M
         reservations:
           cpus: '0.5'
           memory: 512M
-#   ports:
-#     - "8082:8080"
     environment:
-      - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
-      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
-      - KC_PROXY=edge
-      - KC_PROXY_HEADERS=xforwarded
-      - KC_HOSTNAME=findy-keycloak.${DOMAIN}
-      - KC_HEALTH_ENABLED=true
-      - KC_HTTP_ENABLED=true
-      - KC_HOSTNAME_STRICT_HTTPS=false
-      - PROXY_ADDRESS_FORWARDING=true
-      - JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+UseG1GC
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_PROXY: edge
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: openid-federation-server-keycloak.${DOMAIN}
+      KC_HEALTH_ENABLED: true
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT_HTTPS: false
+      PROXY_ADDRESS_FORWARDING: true
+      JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+UseG1GC"
     volumes:
-#     - ./.docker/keycloak:/opt/keycloak/data/import/
       - ./config/keycloak:/opt/keycloak/data/import/
     restart: unless-stopped
     logging:
@@ -215,13 +162,13 @@ services:
       start_period: 10s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.findy-keycloak.rule=Host(`findy-keycloak.${DOMAIN}`)"
-      - "traefik.http.routers.findy-keycloak.priority=1"
-      - "traefik.http.routers.findy-keycloak.tls=true"
-      - "traefik.http.routers.findy-keycloak.tls.certresolver=le"
-      - "traefik.http.routers.findy-keycloak.entrypoints=https"
-      - "traefik.http.routers.findy-keycloak.service=findy-keycloak"
-      - "traefik.http.services.findy-keycloak.loadbalancer.server.port=8080"
+      - "traefik.http.routers.openid-federation-server-keycloak.rule=Host(`openid-federation-server-keycloak.${DOMAIN}`)"
+      - "traefik.http.routers.openid-federation-server-keycloak.priority=1"
+      - "traefik.http.routers.openid-federation-server-keycloak.tls=true"
+      - "traefik.http.routers.openid-federation-server-keycloak.tls.certresolver=le"
+      - "traefik.http.routers.openid-federation-server-keycloak.entrypoints=https"
+      - "traefik.http.routers.openid-federation-server-keycloak.service=openid-federation-server-keycloak"
+      - "traefik.http.services.openid-federation-server-keycloak.loadbalancer.server.port=8080"
 
 networks:
   openid_network:
@@ -231,5 +178,6 @@ networks:
 
 volumes:
   postgres_data:
-  local_kms_data:
-  logs:
+  logs-openid-federation-server:
+  logs-admin-server:
+

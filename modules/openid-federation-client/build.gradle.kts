@@ -2,9 +2,10 @@ import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    kotlin("plugin.serialization") version "2.0.0"
+    alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.npmPublish)
     id("maven-publish")
-    id("dev.petuska.npm.publish") version "3.4.3"
+    alias(libs.plugins.kover)
 }
 
 repositories {
@@ -13,7 +14,11 @@ repositories {
     google()
 }
 
-
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
 
 kotlin {
     jvm()
@@ -60,8 +65,6 @@ kotlin {
     }
 
     sourceSets {
-        val ktor_version: String by project
-
         all {
             languageSettings.optIn("kotlin.js.ExperimentalJsExport")
             languageSettings.optIn("kotlinx.serialization.ExperimentalSerializationApi")
@@ -70,12 +73,12 @@ kotlin {
 
         val commonMain by getting {
             dependencies {
-                implementation("com.mayakapps.kache:kache:2.1.0")
-                implementation("com.mayakapps.kache:file-kache:2.1.0")
-                api(projects.modules.cache)
-                api(projects.modules.httpResolver)
-                api(projects.modules.openapi)
-                api(projects.modules.logger)
+                implementation(libs.kache)
+                implementation(libs.kache.file)
+                api(projects.modules.openidFederationCache)
+                api(projects.modules.openidFederationHttpResolver)
+                api(projects.modules.openidFederationOpenapi)
+                api(projects.modules.openidFederationLogger)
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.client.logging)
                 implementation(libs.ktor.client.content.negotiation)
